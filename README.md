@@ -5,7 +5,9 @@ M5Stratux is a simple interface to the Stratux to allow display of position less
 to an EFB which will handle contacts with positions. However, contacts without a position will be ignored by the EFB 
 (typically). The purpose of M5Stratux is therefore to display information about estimated distance, altitude, and 
 vertical velocity of contacts that have not reported their position to the receiver (either ADS-B contacts that have 
-not sent this information yet, or Mode A/C contacts).
+ and not sent this information yet, or Mode A/C contacts).
+ 
+![Contact list view](stuff)
 
 ## Installation
 This application requires that the M5stack runs the UIFlow firmware. This can be installed using the M5Burner from this 
