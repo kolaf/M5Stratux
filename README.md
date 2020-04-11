@@ -7,7 +7,7 @@ to an EFB which will handle contacts with positions. However, contacts without a
 vertical velocity of contacts that have not reported their position to the receiver (either ADS-B contacts that have 
  and not sent this information yet, or Mode A/C contacts).
  
-![Contact list view](/kolaf/M5Stratux/blob/master/media/screenshot.jpg)
+![Contact list view](/media/screenshot.jpg)
 
 ## Installation
 This application requires that the M5stack runs the UIFlow firmware. This can be installed using the M5Burner from this 
