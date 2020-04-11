@@ -1,4 +1,5 @@
 import json
+import time
 
 from m5stack import *
 from m5ui import *
@@ -25,13 +26,13 @@ class DisplayManager:
         lcd.clear()
         self.connection_status = M5TextBox(0, 0, "Connecting to Stratux", lcd.FONT_Default, 0xFFFFFF, rotate=0)
         self.gps_status = M5TextBox(150, 0, "Connecting to GPS", lcd.FONT_Default, 0xFFFFFF, rotate=0)
-        self.selected_display = self.AIRCRAFT_LIST
+        self.selected_display = -1
         self.previous_display = self.selected_display
         self.report_list = report_list
         self.display_list = {}
         self.active_display = None
         self.display_box = M5TextBox(130, 225, "SCREEN", lcd.FONT_Default, lcd.GREEN, rotate=0)
-        self.alerting = False
+        self.alert_time = -1
         self.__create_displays()
 
     def update_connection_status(self, text):
@@ -45,19 +46,22 @@ class DisplayManager:
         self.display_list[self.AIRCRAFT_DETAILS] = DetailDisplay(self.report_list, self)
         self.display_list[self.NEAREST_PAGE] = NearestDisplay(self.report_list, self)
         self.display_list[self.ALERT_PAGE] = AlertDisplay()
-        self.display_list[self.MESSAGE_PAGE] = MessageDisplay(self)
+        # self.display_list[self.MESSAGE_PAGE] = MessageDisplay(self)
         self.display_list[self.SETTINGS_PAGE] = SettingsPage(self.report_list, self)
 
     def select_display(self, display_type: int):
+        if self.selected_display == display_type:
+            return
         if self.selected_display not in (self.ALERT_PAGE, self.MESSAGE_PAGE):
             self.previous_display = self.selected_display
         if self.active_display:
             self.active_display.hide()
         self.selected_display = display_type
         self.active_display = self.display_list[display_type]
-        self.display_box.setText(self.display_list[self.DISPLAY_TYPES[self.__get_next_display_index()]].get_name())
+        # self.display_box.setText(self.display_list[self.DISPLAY_TYPES[self.__get_next_display_index()]].get_name())
+        self.display_box.setText(self.active_display.get_name())
         print("Activating display '{}'".format(self.active_display.get_name()))
-        self.update_display()
+        # self.update_display()
         self.active_display.show()
 
     def display_message(self, message: str):
@@ -68,6 +72,21 @@ class DisplayManager:
         self.select_display(self.previous_display)
 
     def update_display(self):
+        # Switch to nearest page and alert if there is danger will
+        if self.report_list.is_danger():
+            self.select_display(self.NEAREST_PAGE)
+            self.start_alarm()
+        if self.alert_time > -1:
+            self.select_display(self.ALERT_PAGE)
+            time.sleep(0.2)
+            self.select_display(self.NEAREST_PAGE)
+            # if self.selected_display == self.ALERT_PAGE:
+            #     self.select_display(self.NEAREST_PAGE)
+            # else:
+            if time.time()-self.alert_time>10:
+                # Blink for 10 seconds
+                self.cancel_alarm()
+                # self.select_display(self.NEAREST_PAGE)
         if self.active_display:
             self.active_display.update_display()
 
@@ -79,7 +98,10 @@ class DisplayManager:
             self.active_display.button_a_was_pressed()
 
     def __get_next_display_index(self):
-        current_index = self.DISPLAY_TYPES.index(self.selected_display)
+        try:
+            current_index = self.DISPLAY_TYPES.index(self.selected_display)
+        except:
+            return 0
         current_index += 1
         if current_index == len(self.DISPLAY_TYPES):
             current_index = 0
@@ -95,13 +117,15 @@ class DisplayManager:
         self.active_display.button_c_was_pressed()
 
     def start_alarm(self):
-        self.alerting = True
-        timerSch.run('alarm_event', 1000, 0)
+        self.alert_time = time.time()
+        print("Starting alarm")
+        # timerSch.run('alarm_event', 1000, 0)
 
     def cancel_alarm(self):
-        self.alerting = False
-        timerSch.stop('alarm_event')
-        self.update_display()
+        self.alert_time = -1
+        print("Cancelling alarm")
+        # timerSch.stop('alarm_event')
+        # self.update_display()
 
 
 class Display:
@@ -135,8 +159,8 @@ class SettingsPage(Display):
         self.report_list = report_list
         self.manager = manager
         self.setting_boxes = [
-            (M5TextBox(0, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff),
-             M5TextBox(10, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff),
+            (M5TextBox(0, 0 * self.ROW_SPACING + HEADER_OFFSET, "[ ]", lcd.FONT_Default, 0xffffff),
+             M5TextBox(30, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff),
              M5TextBox(223, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, lcd.GREEN))
         ]
         self.settings = [
@@ -147,14 +171,17 @@ class SettingsPage(Display):
         for index in range(len(self.setting_boxes)):
             self.setting_boxes[index][1].setText(self.settings[index][0])
             self.setting_boxes[index][2].setText("{}".format(self.settings[index][2]()))
+        self.button_a_was_pressed()
         self.ok_box = M5TextBox(223, 225, "TOGGLE", lcd.FONT_Default, lcd.GREEN, rotate=0)
         self.down = M5TextBox(50, 225, "NEXT", lcd.FONT_Default, lcd.GREEN, rotate=0)
+        self.toggled = False
         self.hide(store=False)
 
     def get_name(self):
         return "Settings"
 
     def show(self):
+        self.toggled = False
         self.ok_box.show()
         self.down.show()
         for item in self.setting_boxes:
@@ -169,7 +196,7 @@ class SettingsPage(Display):
             item[0].hide()
             item[1].hide()
             item[2].hide()
-        if store:
+        if store and self.toggled:
             self.store_settings()
 
     def button_a_was_pressed(self):
@@ -177,10 +204,11 @@ class SettingsPage(Display):
         if self.current_setting >= len(self.settings):
             self.current_setting = 0
         for item in self.setting_boxes:
-            item[0].setText("")
-        self.setting_boxes[self.current_setting][0].setText("X")
+            item[0].setText("[ ]")
+        self.setting_boxes[self.current_setting][0].setText("[X]")
 
     def button_c_was_pressed(self):
+        self.toggled = True
         self.settings[self.current_setting][1]()
         self.setting_boxes[self.current_setting][2].setText("{}".format(self.settings[self.current_setting][2]()))
 
@@ -281,6 +309,11 @@ class NearestDisplay(Display):
                                         self.font,
                                         self.background_colour,
                                         rotate=0)
+        self.crossing_time = M5TextBox(100, 2 * self.ROW_SPACING + HEADER_OFFSET, "",
+                                        self.font,
+                                        self.background_colour,
+                                        rotate=0)
+
         self.distance = M5TextBox(0, 3 * self.ROW_SPACING + HEADER_OFFSET, "",
                                   self.font,
                                   self.background_colour,
@@ -303,6 +336,7 @@ class NearestDisplay(Display):
         self.distance.hide()
         self.altitude_difference.hide()
         self.vertical_speed.hide()
+        self.crossing_time.hide()
 
     def show(self):
         self.visible = True
@@ -313,6 +347,7 @@ class NearestDisplay(Display):
         self.age.show()
         self.distance.show()
         self.altitude_difference.show()
+        self.crossing_time.show()
 
     def update_display(self):
         self.reports = self.reports_list.get_list_sorted_score()
@@ -330,6 +365,7 @@ class NearestDisplay(Display):
         self.vertical_speed.setText("{}".format(self.report.vertical_velocity))
         self.altitude_difference.setText(
             "{:.0f}".format(self.report.altitude - self.manager.situation_dictionary["OwnAltitude"]))
+        self.crossing_time.setText("c{:.1f}m".format(self.report.get_altitude_crossing_time()))
 
     def button_a_was_pressed(self):
         if self.alerting:

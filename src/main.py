@@ -49,9 +49,14 @@ def get_status(display_manager):
     status_dictionary.update(status)
 
 
+def create_websocket():
+    websocket = uwebsockets.client.connect("ws://{}/traffic".format(STRATUX_ADDRESS))
+    websocket.settimeout(0.1)
+    return websocket
+
+
 reports_list = ReportList(status_dictionary, situation_dictionary)
 display_manager = DisplayManager(reports_list, status_dictionary, situation_dictionary)
-display_manager.select_display(display_manager.AIRCRAFT_LIST)
 
 # button_c_pressed = False
 # button_c_double_press = False
@@ -105,29 +110,32 @@ gps_fix = False
 while not wifiCfg.wlan_sta.isconnected():
     wifiCfg.doConnect(STRATUX_SSID, '')
 display_manager.update_connection_status('Stratux connected')
-websocket = uwebsockets.client.connect("ws://{}/traffic".format(STRATUX_ADDRESS))
-websocket.settimeout(5)
+websocket = create_websocket()
+display_manager.select_display(display_manager.AIRCRAFT_LIST)
+
 start_time = time.time()
 last_time = 0
-
+last_report = 0
 while True:
     try:
         resp = websocket.recv()
+        last_report = time.time()
         message = read_response(resp)
         # print(message)
         report = reports_list.store_report(message)
         # print(report)
     except Exception as e:
-        print(e)
+        pass
+    if time.time() - last_report > 30:
         try:
             websocket.close()
         except:
             pass
-        websocket = uwebsockets.client.connect("ws://{}/traffic".format(STRATUX_ADDRESS))
-        websocket.settimeout(15)
+        websocket = create_websocket()
+        last_report = time.time()
 
     now = time.time()
-    if now - last_time > 5:
+    if now - last_time > 2:
         last_time = now
         try:
             get_status(display_manager)
@@ -139,4 +147,4 @@ while True:
             print("Failed getting situation: {}".format(e))
         reports_list.flush_old_reports()
         display_manager.update_display()
-        print("Free memory: {}".format(gc.mem_free()))
+        print("Free memory: {} B".format(gc.mem_free()))

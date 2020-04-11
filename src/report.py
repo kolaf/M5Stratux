@@ -63,6 +63,9 @@ class LatestReport:
             self.vertical_velocity = incoming_message.Alt - self.altitude
         else:
             self.vertical_velocity = incoming_message.Vvel
+        # If the altitude is unknown, assume worst-case
+        if self.altitude == 0 and not self.message.OnGround:
+            self.altitude = self.report_list.situation_dictionary["OwnAltitude"]
         self.altitude = incoming_message.Alt
         self.message = incoming_message
 
@@ -73,11 +76,13 @@ class LatestReport:
 
     def get_distance_score(self) -> float:
         minutes_until_altitude_crossing = self.get_altitude_crossing_time()
-        if minutes_until_altitude_crossing< 0.5:
+        if minutes_until_altitude_crossing < 0.5:
             minutes_until_altitude_crossing = 10
-        score = math.fabs(minutes_until_altitude_crossing) * self.get_distance() * math.fabs(
-            self.report_list.situation_dictionary["OwnAltitude"] - self.altitude) / 100000
+        score = math.fabs(minutes_until_altitude_crossing) * self.get_distance()
         return score
+
+    def is_dangerous(self) -> bool:
+        return self.get_distance_score() < 5  # Approximately one minute until altitude crossing and 5 miles away
 
     def get_distance(self) -> float:
         if self.is_good_distance():
@@ -103,6 +108,11 @@ class ReportList:
         self.status_dictionary = status_dictionary
         self.situation_dictionary = situation_dictionary
         self.include_valid_positions = True
+
+    def is_danger(self) -> bool:
+        if len(self.reports) > 0:
+            return self.get_list_sorted_score()[0].is_dangerous()
+        return False
 
     def toggle_include_valid_positions(self, value=None):
         if value is not None:

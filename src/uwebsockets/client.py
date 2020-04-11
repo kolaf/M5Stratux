@@ -30,14 +30,12 @@ def connect(uri):
 
     sock = socket.socket()
     addr = socket.getaddrinfo(uri.hostname, uri.port)
-    print("Debug information")
-    print(addr)
     sock.connect((uri.hostname, uri.port))
     if uri.protocol == 'wss':
         sock = ussl.wrap_socket(sock)
 
     def send_header(header, *args):
-        if __debug__: print(str(header), *args)
+        # if __debug__: print(str(header), *args)
         sock.write(header % args + '\r\n')
 
     # Sec-WebSocket-Key is 16 bytes of random base64 encoded
@@ -62,7 +60,7 @@ def connect(uri):
     # We don't (currently) need these headers
     # FIXME: should we check the return key?
     while header:
-        if __debug__: print(str(header))
+        # if __debug__: print(str(header))
         header = sock.readline()[:-2]
 
     return WebsocketClient(sock)
