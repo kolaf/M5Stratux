@@ -42,3 +42,26 @@ Shows a blown up view of the nearest/most threatening contact
 A settings screen That a large toggling whether the device should display contacts with a a valid position (presumably 
 these are handled by an EFB), or should only display contacts without a valid position. Settings are saved when exiting 
 the screen.
+
+## Simple user interface
+The left button is always context sensitive to the current screen being displayed.
+
+The middle button will always select the next screen (the name of the next screen is displayed over the button).
+
+The right button is context sensitive, currently only used for the settings screen.
+
+## Danger estimation
+Since the distance estimate is unreliable, the best metric I come up with for doing estimation is the following:
+
+```
+def get_distance_score(self) -> float:
+    minutes_until_altitude_crossing = self.get_altitude_crossing_time()
+    if minutes_until_altitude_crossing< 0.5:
+        minutes_until_altitude_crossing = 10
+    score = math.fabs(minutes_until_altitude_crossing) * self.get_distance() * math.fabs(
+        self.report_list.situation_dictionary["OwnAltitude"] - self.altitude) / 100000
+    return score
+```
+
+## List view explained
+![List view explained](/media/screenshot_explained.jpg)

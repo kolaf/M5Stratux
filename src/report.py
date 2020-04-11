@@ -73,6 +73,8 @@ class LatestReport:
 
     def get_distance_score(self) -> float:
         minutes_until_altitude_crossing = self.get_altitude_crossing_time()
+        if minutes_until_altitude_crossing< 0.5:
+            minutes_until_altitude_crossing = 10
         score = math.fabs(minutes_until_altitude_crossing) * self.get_distance() * math.fabs(
             self.report_list.situation_dictionary["OwnAltitude"] - self.altitude) / 100000
         return score
