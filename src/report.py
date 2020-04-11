@@ -100,9 +100,26 @@ class ReportList:
         self.key_map = {}
         self.status_dictionary = status_dictionary
         self.situation_dictionary = situation_dictionary
+        self.include_valid_positions = True
+
+    def toggle_include_valid_positions(self, value = None):
+        if value is not None:
+            self.include_valid_positions = value
+            return
+        self.include_valid_positions = not self.include_valid_positions
+        if self.include_valid_positions:
+            print("Including valid positions")
+        else:
+            print("Not including valid positions")
+
+    def get_include_valid_positions(self):
+        return self.include_valid_positions
+
+    def get_selected_reports(self):
+        return [item for item in self.reports.values() if item.message.Position_valid]
 
     def get_list_sorted_score(self):
-        return sorted(self.reports.values(), key=lambda k: k.get_distance_score())
+        return sorted(self.get_selected_reports(), key=lambda k: k.get_distance_score())
 
     def flush_old_reports(self):
         for key in self.reports.keys():

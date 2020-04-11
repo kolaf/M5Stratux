@@ -1,5 +1,8 @@
+import json
+
 from m5stack import *
 from m5ui import *
+import _thread
 
 import math
 
@@ -11,7 +14,10 @@ class DisplayManager:
     AIRCRAFT_LIST = 0
     AIRCRAFT_DETAILS = 1
     NEAREST_PAGE = 2
-    DISPLAY_TYPES = (AIRCRAFT_LIST, AIRCRAFT_DETAILS, NEAREST_PAGE)
+    ALERT_PAGE = 3
+    MESSAGE_PAGE = 3
+    SETTINGS_PAGE = 4
+    DISPLAY_TYPES = (AIRCRAFT_LIST, AIRCRAFT_DETAILS, NEAREST_PAGE, SETTINGS_PAGE)
 
     def __init__(self, report_list: "ReportList", status_dictionary, situation_dictionary):
         self.status_dictionary = status_dictionary
@@ -20,14 +26,12 @@ class DisplayManager:
         self.connection_status = M5TextBox(0, 0, "Connecting to Stratux", lcd.FONT_Default, 0xFFFFFF, rotate=0)
         self.gps_status = M5TextBox(150, 0, "Connecting to GPS", lcd.FONT_Default, 0xFFFFFF, rotate=0)
         self.selected_display = self.AIRCRAFT_LIST
+        self.previous_display = self.selected_display
         self.report_list = report_list
         self.display_list = {}
         self.active_display = None
         self.display_box = M5TextBox(130, 225, "SCREEN", lcd.FONT_Default, lcd.GREEN, rotate=0)
-        self.nearest_box = M5TextBox(223, 225, "NEAREST", lcd.FONT_Default, lcd.GREEN, rotate=0)
-        self.alert_rectangle = M5Rect(0, 30, 320, 240 - HEADER_OFFSET - FOOTER_OFFSET, lcd.YELLOW, lcd.RED)
-        self.alert_rectangle.hide()
-
+        self.alerting = False
         self.__create_displays()
 
     def update_connection_status(self, text):
@@ -40,41 +44,39 @@ class DisplayManager:
         self.display_list[self.AIRCRAFT_LIST] = ListDisplay(self.report_list, self)
         self.display_list[self.AIRCRAFT_DETAILS] = DetailDisplay(self.report_list, self)
         self.display_list[self.NEAREST_PAGE] = NearestDisplay(self.report_list, self)
+        self.display_list[self.ALERT_PAGE] = AlertDisplay()
+        self.display_list[self.MESSAGE_PAGE] = MessageDisplay(self)
+        self.display_list[self.SETTINGS_PAGE] = SettingsPage(self.report_list, self)
 
     def select_display(self, display_type: int):
+        if self.selected_display not in (self.ALERT_PAGE, self.MESSAGE_PAGE):
+            self.previous_display = self.selected_display
         if self.active_display:
             self.active_display.hide()
         self.selected_display = display_type
         self.active_display = self.display_list[display_type]
         self.display_box.setText(self.display_list[self.DISPLAY_TYPES[self.__get_next_display_index()]].get_name())
         print("Activating display '{}'".format(self.active_display.get_name()))
+        self.update_display()
         self.active_display.show()
 
-    def show_alert(self):
-        # self.hide()
-        self.alert_rectangle.show()
+    def display_message(self, message: str):
+        self.display_list[self.MESSAGE_PAGE].set_message(message)
+        self.select_display(self.MESSAGE_PAGE)
 
-    def hide_alert(self):
-        self.hide()
-        self.alert_rectangle.hide()
-        self.show()
-
-    def show(self):
-        if self.active_display:
-            self.active_display.show()
-
-    def hide(self):
-        if self.active_display:
-            self.active_display.hide()
+    def previous_display(self):
+        self.select_display(self.previous_display)
 
     def update_display(self):
-        self.active_display.update_display()
+        if self.active_display:
+            self.active_display.update_display()
 
     def button_a_was_pressed(self):
         """
         Display specific button
         """
-        self.active_display.button_a_was_pressed()
+        if self.active_display:
+            self.active_display.button_a_was_pressed()
 
     def __get_next_display_index(self):
         current_index = self.DISPLAY_TYPES.index(self.selected_display)
@@ -90,7 +92,16 @@ class DisplayManager:
         self.select_display(self.DISPLAY_TYPES[self.__get_next_display_index()])
 
     def button_c_was_pressed(self):
-        self.select_display(self.NEAREST_PAGE)
+        self.active_display.button_c_was_pressed()
+
+    def start_alarm(self):
+        self.alerting = True
+        timerSch.run('alarm_event', 1000, 0)
+
+    def cancel_alarm(self):
+        self.alerting = False
+        timerSch.stop('alarm_event')
+        self.update_display()
 
 
 class Display:
@@ -112,8 +123,123 @@ class Display:
     # def button_b_was_pressed(self):
     #     pass
     #
-    # def button_c_was_pressed(self):
-    #     pass
+    def button_c_was_pressed(self):
+        pass
+
+
+class SettingsPage(Display):
+    ROW_SPACING = 25
+
+    def __init__(self, report_list, manager):
+        self.current_setting = -1
+        self.report_list = report_list
+        self.manager = manager
+        self.setting_boxes = [
+            (M5TextBox(0, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff),
+             M5TextBox(10, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff),
+             M5TextBox(223, 0 * self.ROW_SPACING + HEADER_OFFSET, "", lcd.FONT_Default, lcd.GREEN))
+        ]
+        self.settings = [
+            ("Include valid:", self.report_list.toggle_include_valid_positions,
+             self.report_list.get_include_valid_positions)
+        ]
+        for index in range(len(self.setting_boxes)):
+            self.setting_boxes[index][1].setText(self.settings[index][0])
+            self.setting_boxes[index][2].setText("{}".format(self.settings[index][2]))
+        self.button_c_was_pressed()
+        self.ok_box = M5TextBox(223, 225, "TOGGLE", lcd.FONT_Default, lcd.GREEN, rotate=0)
+        self.down = M5TextBox(50, 225, "NEXT", lcd.FONT_Default, lcd.GREEN, rotate=0)
+        self.hide()
+        self.load_settings()
+
+    def get_name(self):
+        return "Settings"
+
+    def show(self):
+        self.ok_box.show()
+        self.down.show()
+        for item in self.setting_boxes:
+            item[0].show()
+            item[1].show()
+            item[2].show()
+
+    def hide(self):
+        self.ok_box.hide()
+        self.down.hide()
+        for item in self.setting_boxes:
+            item[0].hide()
+            item[1].hide()
+            item[2].hide()
+        self.store_settings()
+
+    def button_a_was_pressed(self):
+        self.current_setting += 1
+        if self.current_setting >= len(self.settings):
+            self.current_setting = 0
+        for item in self.setting_boxes:
+            item[0].setText("")
+        self.setting_boxes[self.current_setting][0].setText("")
+
+    def button_c_was_pressed(self):
+        self.settings[self.current_setting][1]()
+        self.setting_boxes[self.current_setting][2].setText("{}".format(self.settings[self.current_setting][2]()))
+
+    def store_settings(self):
+        print("Storing settings")
+        data = {}
+        for item in self.settings:
+            name, setter, getter = item
+            data[name] = getter()
+        with open("settings.json", "w") as o:
+            json.dump(data, o)
+
+    def load_settings(self):
+        print("Loading settings")
+        with open("settings.json", "r") as o:
+            data = json.load(o)
+        for item in self.settings:
+            name, setter, getter = item
+            try:
+                setter(data[name])
+            except KeyError:
+                pass
+
+
+class MessageDisplay(Display):
+    def __init__(self, manager):
+        self.message_box = M5TextBox(30, 100, "", lcd.FONT_Default, lcd.BLUE, rotate=0)
+        self.ok_box = M5TextBox(50, 225, "OK", lcd.FONT_Default, lcd.GREEN, rotate=0)
+        self.manager = manager
+        self.hide()
+
+    def get_name(self):
+        return "Message"
+
+    def show(self):
+        self.message_box.show()
+        self.ok_box.show()
+
+    def hide(self):
+        self.message_box.hide()
+        self.ok_box.hide()
+
+    def button_a_was_pressed(self):
+        self.manager.previous_display()
+
+
+class AlertDisplay(Display):
+    def __init__(self):
+        self.alert_rectangle = M5Rect(0, 30, 320, 240 - HEADER_OFFSET - FOOTER_OFFSET, lcd.YELLOW, lcd.RED)
+        self.hide()
+
+    def get_name(self):
+        return "Alert"
+
+    def show(self):
+        self.alert_rectangle.show()
+
+    def hide(self):
+        self.alert_rectangle.hide()
 
 
 class NearestDisplay(Display):
@@ -129,32 +255,32 @@ class NearestDisplay(Display):
         self.font = lcd.FONT_DejaVu40
         self.background_colour = 0xFFFFFF
         self.alerting = False
-        self.identifier = M5TextBox(30, 0 * self.ROW_SPACING + HEADER_OFFSET, "", self.font,
+        self.identifier = M5TextBox(40, 0 * self.ROW_SPACING + HEADER_OFFSET, "", self.font,
                                     lcd.MAGENTA,
                                     rotate=0)
-        self.altitude_difference_header = M5TextBox(40, 1 * self.ROW_SPACING, "ft",
+        self.altitude_difference_header = M5TextBox(25, 1 * self.ROW_SPACING, "d ft",
                                                     lcd.FONT_Default,
                                                     self.background_colour,
                                                     rotate=0)
-        self.vertical_speed_difference_header = M5TextBox(250, 1 * self.ROW_SPACING, "ft/m",
+        self.vertical_speed_difference_header = M5TextBox(260, 1 * self.ROW_SPACING, "ft/m",
                                                           lcd.FONT_Default,
                                                           self.background_colour,
                                                           rotate=0)
 
-        self.altitude_difference = M5TextBox(0, 1 * self.ROW_SPACING + self.ROW_OFFSET, "",
+        self.altitude_difference = M5TextBox(0, 1 * self.ROW_SPACING + HEADER_OFFSET, "",
                                              self.font,
                                              self.background_colour,
                                              rotate=0)
-        self.vertical_speed = M5TextBox(170, 1 * self.ROW_SPACING + self.ROW_OFFSET, "",
+        self.vertical_speed = M5TextBox(200, 1 * self.ROW_SPACING + HEADER_OFFSET, "",
                                         self.font,
                                         self.background_colour,
                                         rotate=0)
-        self.distance = M5TextBox(0, 3 * self.ROW_SPACING + self.ROW_OFFSET, "",
+        self.distance = M5TextBox(0, 3 * self.ROW_SPACING + HEADER_OFFSET, "",
                                   self.font,
                                   self.background_colour,
                                   rotate=0)
 
-        self.age = M5TextBox(200, 3 * self.ROW_SPACING + self.ROW_OFFSET, "", self.font,
+        self.age = M5TextBox(200, 3 * self.ROW_SPACING + HEADER_OFFSET, "", self.font,
                              self.background_colour,
                              rotate=0)
         self.hide()
@@ -171,7 +297,6 @@ class NearestDisplay(Display):
         self.distance.hide()
         self.altitude_difference.hide()
         self.vertical_speed.hide()
-        self.cancel_alarm()
 
     def show(self):
         self.visible = True
@@ -186,7 +311,9 @@ class NearestDisplay(Display):
     def update_display(self):
         self.reports = self.reports_list.get_list_sorted_score()
         if len(self.reports) == 0:
+            self.hide()
             return
+        self.show()
         self.report = self.reports[0]
         self.identifier.setText("{: ^10}".format(self.report.identifier))
         if self.report.is_good_distance():
@@ -198,20 +325,11 @@ class NearestDisplay(Display):
         self.altitude_difference.setText(
             "{:.0f}".format(self.report.altitude - self.manager.situation_dictionary["OwnAltitude"]))
 
-    def start_alarm(self):
-        self.alerting = True
-        timerSch.run('alarm_event', 1000, 0)
-
-    def cancel_alarm(self):
-        self.alerting = False
-        timerSch.stop('alarm_event')
-        self.update_display()
-
     def button_a_was_pressed(self):
         if self.alerting:
-            self.cancel_alarm()
+            self.manager.cancel_alarm()
         else:
-            self.start_alarm()
+            self.manager.start_alarm()
 
 
 class DetailDisplay(Display):
@@ -227,27 +345,27 @@ class DetailDisplay(Display):
         self.visible = False
         self.font = lcd.FONT_DejaVu24
         self.background_colour = 0xFFFFFF
-        self.identifier = M5TextBox(140, self.ROW_SPACING + self.ROW_OFFSET, "", self.font,
+        self.identifier = M5TextBox(110, self.ROW_SPACING + HEADER_OFFSET, "", self.font,
                                     lcd.MAGENTA,
                                     rotate=0)
-        self.distance = M5TextBox(10, 2 * self.ROW_SPACING + self.ROW_OFFSET, "", self.font,
+        self.distance = M5TextBox(10, 2 * self.ROW_SPACING + HEADER_OFFSET, "", self.font,
                                   self.background_colour,
                                   rotate=0)
-        self.altitude = M5TextBox(200, 2 * self.ROW_SPACING + self.ROW_OFFSET, "", self.font,
+        self.altitude = M5TextBox(200, 2 * self.ROW_SPACING + HEADER_OFFSET, "", self.font,
                                   self.background_colour,
                                   rotate=0)
-        self.crossing_time = M5TextBox(0, 3 * self.ROW_SPACING + self.ROW_OFFSET, "",
+        self.crossing_time = M5TextBox(0, 3 * self.ROW_SPACING + HEADER_OFFSET, "",
                                        self.font,
                                        self.background_colour,
                                        rotate=0)
-        self.score = M5TextBox(150, 3 * self.ROW_SPACING + self.ROW_OFFSET, "",
+        self.score = M5TextBox(150, 3 * self.ROW_SPACING + HEADER_OFFSET, "",
                                self.font,
                                self.background_colour,
                                rotate=0)
-        self.age = M5TextBox(250, 3 * self.ROW_SPACING + self.ROW_OFFSET, "", self.font,
+        self.age = M5TextBox(250, 3 * self.ROW_SPACING + HEADER_OFFSET, "", self.font,
                              self.background_colour,
                              rotate=0)
-        self.altitude_difference = M5TextBox(0, 4 * self.ROW_SPACING + self.ROW_OFFSET, "",
+        self.altitude_difference = M5TextBox(0, 4 * self.ROW_SPACING + HEADER_OFFSET, "",
                                              self.font,
                                              self.background_colour,
                                              rotate=0)
@@ -285,7 +403,7 @@ class DetailDisplay(Display):
         new_report_list = self.reports_list.get_list_sorted_score()
         self.reports = new_report_list
         self.current_index = min(len(new_report_list), self.current_index)
-        self.index_box.setText("{}/{}".format(self.current_index, len(self.reports)))
+        self.index_box.setText("{}/{}".format(self.current_index + 1, len(self.reports)))
         if len(new_report_list) == 0:
             return
 
@@ -337,19 +455,19 @@ class ListDisplay(Display):
         self.previous_report_list = []
         for index in range(self.number_of_rows):
             self.rows.append((
-                M5TextBox(0, index * self.ROW_SPACING + self.ROW_OFFSET, "", self.font, self.background_colour,
+                M5TextBox(0, index * self.ROW_SPACING + HEADER_OFFSET, "", self.font, lcd.MAGENTA,
                           rotate=0),
-                M5TextBox(100, index * self.ROW_SPACING + self.ROW_OFFSET, "", self.font, self.background_colour,
+                M5TextBox(100, index * self.ROW_SPACING + HEADER_OFFSET, "", self.font, self.background_colour,
                           rotate=0),
-                M5TextBox(200, index * self.ROW_SPACING + self.ROW_OFFSET, "", self.font, self.background_colour,
+                M5TextBox(200, index * self.ROW_SPACING + HEADER_OFFSET, "", self.font, self.background_colour,
                           rotate=0),
-                M5TextBox(0, index * self.ROW_SPACING + self.ROW_OFFSET + int(self.ROW_SPACING / 2), "", self.font,
+                M5TextBox(0, index * self.ROW_SPACING + HEADER_OFFSET + int(self.ROW_SPACING / 2), "", self.font,
                           self.background_colour,
                           rotate=0),
-                M5TextBox(150, index * self.ROW_SPACING + self.ROW_OFFSET + int(self.ROW_SPACING / 2), "", self.font,
+                M5TextBox(150, index * self.ROW_SPACING + HEADER_OFFSET + int(self.ROW_SPACING / 2), "", self.font,
                           self.background_colour,
                           rotate=0),
-                M5TextBox(250, index * self.ROW_SPACING + self.ROW_OFFSET + int(self.ROW_SPACING / 2), "", self.font,
+                M5TextBox(250, index * self.ROW_SPACING + HEADER_OFFSET + int(self.ROW_SPACING / 2), "", self.font,
                           self.background_colour,
                           rotate=0)
             ))

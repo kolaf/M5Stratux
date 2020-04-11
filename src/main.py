@@ -52,22 +52,53 @@ def get_status(display_manager):
 reports_list = ReportList(status_dictionary, situation_dictionary)
 display_manager = DisplayManager(reports_list, status_dictionary, situation_dictionary)
 display_manager.select_display(display_manager.AIRCRAFT_LIST)
+
+# button_c_pressed = False
+# button_c_double_press = False
+# def button_c_press_handler():
+#     global button_c_pressed
+#     button_c_pressed = True
+#
+# def button_c_double_press_handler():
+#     global button_c_double_press
+#     button_c_double_press = True
+#
+# def button_c_released_handler():
+#     global button_c_pressed, button_c_double_press
+#     if button_c_double_press:
+#         reports_list.toggle_include_valid_positions()
+#     else:
+#         display_manager.button_c_was_pressed()
+#     button_c_double_press = False
+#     button_c_pressed = False
+
+
 btnA.wasPressed(display_manager.button_a_was_pressed)
 btnB.wasPressed(display_manager.button_b_was_pressed)
 btnC.wasPressed(display_manager.button_c_was_pressed)
+# btnC.wasReleased(button_c_released_handler)
+# btnC.wasDoublePress(button_c_double_press_handler)
 
-alerting = False
-
-
-@timerSch.event('alarm_event')
-def alarm():
-    global display_manager, alerting
-    if alerting:
-        display_manager.hide_alert()
-        alerting = False
-    else:
-        alerting = True
-        display_manager.show_alert()
+# alerting = False
+# alert_start = 0
+#
+#
+# @timerSch.event('alarm_event')
+# def alarm():
+#     global display_manager, alerting, alert_start
+#     if alert_start == 0:
+#         alert_start = time.time()
+#     if time.time() - alert_start > 10:
+#         display_manager.cancel_alarm()
+#         alert_start = 0
+#         alerting = False
+#         return
+#     if alerting:
+#         display_manager.alerting = True
+#         alerting = False
+#     else:
+#         display_manager.alerting = False
+#         alerting = True
 
 
 gps_fix = False
