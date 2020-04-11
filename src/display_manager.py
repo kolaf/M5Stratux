@@ -195,8 +195,12 @@ class SettingsPage(Display):
 
     def load_settings(self):
         print("Loading settings")
-        with open("settings.json", "r") as o:
-            data = json.load(o)
+        try:
+            with open("settings.json", "r") as o:
+                data = json.load(o)
+        except:
+            print("Failed loading file 'settings.json'")
+            return
         for item in self.settings:
             name, setter, getter = item
             print("Checking setting {}".format(name))
