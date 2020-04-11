@@ -102,11 +102,11 @@ class ReportList:
         self.situation_dictionary = situation_dictionary
         self.include_valid_positions = True
 
-    def toggle_include_valid_positions(self, value = None):
+    def toggle_include_valid_positions(self, value=None):
         if value is not None:
             self.include_valid_positions = value
-            return
-        self.include_valid_positions = not self.include_valid_positions
+        else:
+            self.include_valid_positions = not self.include_valid_positions
         if self.include_valid_positions:
             print("Including valid positions")
         else:

@@ -143,13 +143,12 @@ class SettingsPage(Display):
             ("Include valid:", self.report_list.toggle_include_valid_positions,
              self.report_list.get_include_valid_positions)
         ]
+        self.load_settings()
         for index in range(len(self.setting_boxes)):
             self.setting_boxes[index][1].setText(self.settings[index][0])
-            self.setting_boxes[index][2].setText("{}".format(self.settings[index][2]))
-        self.button_c_was_pressed()
+            self.setting_boxes[index][2].setText("{}".format(self.settings[index][2]()))
         self.ok_box = M5TextBox(223, 225, "TOGGLE", lcd.FONT_Default, lcd.GREEN, rotate=0)
         self.down = M5TextBox(50, 225, "NEXT", lcd.FONT_Default, lcd.GREEN, rotate=0)
-        self.load_settings()
         self.hide(store=False)
 
     def get_name(self):
@@ -179,7 +178,7 @@ class SettingsPage(Display):
             self.current_setting = 0
         for item in self.setting_boxes:
             item[0].setText("")
-        self.setting_boxes[self.current_setting][0].setText("")
+        self.setting_boxes[self.current_setting][0].setText("X")
 
     def button_c_was_pressed(self):
         self.settings[self.current_setting][1]()
@@ -200,10 +199,12 @@ class SettingsPage(Display):
             data = json.load(o)
         for item in self.settings:
             name, setter, getter = item
+            print("Checking setting {}".format(name))
             try:
+                print("Setting {} to {}".format(name, data[name]))
                 setter(data[name])
             except KeyError:
-                pass
+                print("Setting failed")
 
 
 class MessageDisplay(Display):
