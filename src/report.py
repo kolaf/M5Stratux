@@ -116,7 +116,10 @@ class ReportList:
         return self.include_valid_positions
 
     def get_selected_reports(self):
-        return [item for item in self.reports.values() if item.message.Position_valid]
+        if self.get_include_valid_positions():
+            return [item for item in self.reports.values() if item.message.Position_valid]
+        else:
+            return  self.reports.values()
 
     def get_list_sorted_score(self):
         return sorted(self.get_selected_reports(), key=lambda k: k.get_distance_score())
