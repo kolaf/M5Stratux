@@ -149,8 +149,8 @@ class SettingsPage(Display):
         self.button_c_was_pressed()
         self.ok_box = M5TextBox(223, 225, "TOGGLE", lcd.FONT_Default, lcd.GREEN, rotate=0)
         self.down = M5TextBox(50, 225, "NEXT", lcd.FONT_Default, lcd.GREEN, rotate=0)
-        self.hide()
         self.load_settings()
+        self.hide(store=False)
 
     def get_name(self):
         return "Settings"
@@ -163,14 +163,15 @@ class SettingsPage(Display):
             item[1].show()
             item[2].show()
 
-    def hide(self):
+    def hide(self, store=True):
         self.ok_box.hide()
         self.down.hide()
         for item in self.setting_boxes:
             item[0].hide()
             item[1].hide()
             item[2].hide()
-        self.store_settings()
+        if store:
+            self.store_settings()
 
     def button_a_was_pressed(self):
         self.current_setting += 1
