@@ -1,3 +1,4 @@
+import datetime
 import json
 import math
 import time
@@ -47,25 +48,28 @@ class LatestReport:
         self.vertical_velocity = 0
         self.message = incoming_message
         self.report_list = report_list
+        self.altitudes = []
         self.update_report(incoming_message)
 
     def update_report(self, incoming_message: Message):
         self.identifier = get_identifier(incoming_message)
         self.age = incoming_message.Age
         self.last_updated = time.time()
-        if incoming_message.Alt > self.altitude:
-            self.altitude_change = self.CLIMBING
-        elif incoming_message.Alt < self.altitude:
-            self.altitude_change = self.DESCENDING
-        else:
-            self.altitude_change = self.LEVEL
-        if incoming_message.Vvel == 0:
-            self.vertical_velocity = incoming_message.Alt - self.altitude
-        else:
-            self.vertical_velocity = incoming_message.Vvel
         # If the altitude is unknown, assume worst-case
+        incoming_altitude_timestamp = datetime.datetime.strptime(incoming_message.Last_alt, "%Y-%m-%dT%H:%M:%S.%fZ")
         if self.altitude == 0 and not self.message.OnGround:
             self.altitude = self.report_list.situation_dictionary["OwnAltitude"]
+        else:
+            self.altitudes.append((incoming_message.Alt, incoming_altitude_timestamp))
+            if len(self.altitude) > 10:
+                self.altitudes.pop(0)
+        if incoming_message.Vvel == 0 and len(self.altitudes) > 0 and incoming_altitude_timestamp != self.altitudes[0][
+            1]:
+            self.vertical_velocity = 60 * (incoming_message.Alt - self.altitudes[0][0]) / (
+                    incoming_altitude_timestamp - self.altitudes[0][1])
+        else:
+            self.vertical_velocity = incoming_message.Vvel
+
         self.altitude = incoming_message.Alt
         self.message = incoming_message
 
