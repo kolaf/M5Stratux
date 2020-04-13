@@ -11,6 +11,7 @@ from report import *
 
 STRATUX_ADDRESS = "192.168.10.1"
 STRATUX_SSID = "stratux"
+INITIAL_ALT = 700
 
 key_map = {}
 status_dictionary = {}
@@ -37,12 +38,16 @@ def get_situation():
 
 def get_my_altitude():
     global situation_dictionary
-    previous_altitude = situation_dictionary.get("GPSAltitudeMSL")
-    previous_vertical_velocity = situation_dictionary.get("GPSVerticalSpeed")
+    previous_altitude = situation_dictionary.get("OwnAltitude", INITIAL_ALT)
+    previous_vertical_velocity = situation_dictionary.get("OwnVerticalVelocity", 0)
     get_situation()
-    situation_dictionary["OwnAltitude"] = situation_dictionary.get("GPSAltitudeMSL", previous_altitude)
-    situation_dictionary["OwnVerticalVelocity"] = situation_dictionary.get("GPSVerticalSpeed",
-                                                                           previous_vertical_velocity)
+    if situation_dictionary["GPSHorizontalAccuracy"] > 999:
+        situation_dictionary["OwnAltitude"] = previous_altitude
+        situation_dictionary["OwnVerticalVelocity"] = previous_vertical_velocity
+    else:
+        situation_dictionary["OwnAltitude"] = situation_dictionary.get("GPSAltitudeMSL", previous_altitude)
+        situation_dictionary["OwnVerticalVelocity"] = situation_dictionary.get("GPSVerticalSpeed",
+                                                                               previous_vertical_velocity)
 
 
 def get_status(display_manager):
@@ -110,6 +115,9 @@ while True:
             get_my_altitude()
         except Exception as e:
             print("Failed getting situation: {}".format(e))
+        print("OwnAlt: {}".format(situation_dictionary["OwnAltitude"]))
+        print("Acc: {}".format(situation_dictionary["GPSHorizontalAccuracy"]))
+
         reports_list.flush_old_reports()
         display_manager.update_display()
         print("Free memory: {} B".format(gc.mem_free()))

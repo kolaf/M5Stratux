@@ -55,7 +55,7 @@ class LatestReport:
         self.age = incoming_message.Age
         self.last_updated = time.time()
         # If the altitude is unknown, assume worst-case
-        incoming_altitude_timestamp = time.time()-incoming_message.AgeLastAlt
+        incoming_altitude_timestamp = time.time() - incoming_message.AgeLastAlt
         if self.altitude == 0 and not self.message.OnGround:
             self.altitude = self.report_list.situation_dictionary["OwnAltitude"]
         else:
@@ -93,8 +93,8 @@ class LatestReport:
         return distance_to_nm(self.message.DistanceEstimated)
 
     def is_good_distance(self) -> bool:
-        return self.message.BearingDist_valid and self.message.Position_valid and self.report_list.status_dictionary[
-            "GPS_connected"]
+        return self.message.BearingDist_valid and self.message.Position_valid and self.report_list.situation_dictionary[
+            "GPSHorizontalAccuracy"] < 999
 
     def get_age(self) -> float:
         return self.message.Age + time.time() - self.last_updated
