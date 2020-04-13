@@ -6,7 +6,7 @@ from m5ui import *
 
 import math
 
-from clip_line import SCREEN_HEIGHT, SCREEN_WIDTH, clip_line, HEADER_OFFSET, FOOTER_OFFSET
+from clip_line import SCREEN_HEIGHT, SCREEN_WIDTH, clip_line, HEADER_OFFSET, FOOTER_OFFSET, extend_line
 
 
 class DisplayManager:
@@ -28,6 +28,8 @@ class DisplayManager:
         self.selected_display = -1
         self.previous_display = self.selected_display
         self.report_list = report_list
+        self.trigger_update_display = False
+        self.trigger_select_display = -1
         self.display_list = {}
         self.active_display = None
         self.display_box = M5TextBox(130, 225, "SCREEN", lcd.FONT_Default, lcd.GREEN, rotate=0)
@@ -50,6 +52,12 @@ class DisplayManager:
         self.display_list[self.ALTITUDE_PROFILE_PAGE] = AltitudeProfilePage(self.report_list, self)
 
     def select_display(self, display_type: int):
+        self.trigger_select_display = display_type
+        self.trigger_update_display = True
+
+    def actually_change_display(self):
+        display_type = self.trigger_select_display
+        self.trigger_select_display = -1
         if self.selected_display == display_type:
             return
         if self.selected_display not in (self.ALERT_PAGE, self.MESSAGE_PAGE):
@@ -61,7 +69,6 @@ class DisplayManager:
         # self.display_box.setText(self.display_list[self.DISPLAY_TYPES[self.__get_next_display_index()]].get_name())
         self.display_box.setText(self.active_display.get_name())
         print("Activating display '{}'".format(self.active_display.get_name()))
-        # self.update_display()
         self.active_display.show()
 
     def display_message(self, message: str):
@@ -72,6 +79,7 @@ class DisplayManager:
         self.select_display(self.previous_display)
 
     def update_display(self):
+        self.trigger_update_display = False
         # Switch to nearest page and alert if there is danger will
         if self.report_list.is_danger():
             self.select_display(self.NEAREST_PAGE)
@@ -114,18 +122,16 @@ class DisplayManager:
         self.select_display(self.DISPLAY_TYPES[self.__get_next_display_index()])
 
     def button_c_was_pressed(self):
-        self.active_display.button_c_was_pressed()
+        if self.active_display:
+            self.active_display.button_c_was_pressed()
 
     def start_alarm(self):
         self.alert_time = time.time()
         print("Starting alarm")
-        # timerSch.run('alarm_event', 1000, 0)
 
     def cancel_alarm(self):
         self.alert_time = -1
         print("Cancelling alarm")
-        # timerSch.stop('alarm_event')
-        # self.update_display()
 
 
 class Display:
@@ -154,6 +160,7 @@ class AltitudeProfilePage(Display):
         self.manager = manager
         self.x_range = 2  # minutes
         self.y_range = 2000  # feet
+        self.cleared = False
         self.x_scale_box = M5TextBox(290, 3 + SCREEN_HEIGHT // 2, "", lcd.FONT_Default, 0xffffff)
         self.y_scale_box = M5TextBox(5, HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff)
         self.zoom_out_box = M5TextBox(223, 225, "Out", lcd.FONT_Default, lcd.GREEN, rotate=0)
@@ -174,11 +181,13 @@ class AltitudeProfilePage(Display):
 
     def update_display(self):
         reports = self.report_list.get_selected_reports()
+        if not self.cleared:
+            self.redraw()
         if len(reports) == 0:
             return
-        self.redraw()
         start_altitude = self.manager.situation_dictionary["OwnAltitude"]
         for report in reports:  # type: PositionReport
+            self.cleared = False
             altitude_difference = report.altitude - start_altitude
             y = self.scale_y(altitude_difference)
             crossing_time = report.get_altitude_crossing_time()
@@ -188,7 +197,21 @@ class AltitudeProfilePage(Display):
                 crossing_altitude = y
             else:
                 crossing_altitude = SCREEN_HEIGHT // 2
-            x0, y0, x1, y1 = clip_line(0, y, x, crossing_altitude)
+            if x >= 0:
+                # Crossing time is in the future
+                x0 = 0
+                y0 = y
+                x1 = x
+                y1 = crossing_altitude
+            else:
+                # Crossing time was in the past
+                x0 = x
+                y0 = crossing_altitude
+                x1 = 0
+                y1 = y
+            x1, y1 = extend_line(x0, y0, x1, y1)
+            x0, y0, x1, y1 = clip_line(x0, y0, x1, y1)
+
             if x0 is None:
                 continue
             distance_fraction = 1 - min(report.get_distance() / 20, 1)  # Fraction of 20 nautical miles
@@ -196,12 +219,15 @@ class AltitudeProfilePage(Display):
             colour_grade = int(distance_fraction * 240) + 16
             colour = colour_grade * 255 * 255 + colour_grade * 255 + colour_grade
             lcd.line(x0, y0, x1, y1, color=colour)
-            if x > SCREEN_WIDTH:
+            text_width = lcd.textWidth(str(report.identifier))
+            if x1 >= SCREEN_WIDTH-1:
                 lcd.font(lcd.FONT_DefaultSmall)
-                lcd.print(report.identifier, int(x1 - lcd.textWidth(report.identifier)), y1)
+                lcd.print("{}".format(report.identifier), int(x1 - text_width), y1)
             else:
                 lcd.font(lcd.FONT_DefaultSmall, rotate=90)
-                lcd.print(report.identifier, x1, SCREEN_HEIGHT // 2)
+
+                lcd.print("{}".format(report.identifier), x1,
+                          y1 if y1 < SCREEN_HEIGHT - FOOTER_OFFSET - text_width else y1 - text_width)
 
     def update_scale_boxes(self):
         self.x_scale_box.setText("{}m".format(self.x_range))
@@ -209,6 +235,7 @@ class AltitudeProfilePage(Display):
 
     def clear(self):
         lcd.rect(0, HEADER_OFFSET, SCREEN_WIDTH, SCREEN_HEIGHT - FOOTER_OFFSET, lcd.BLACK, lcd.BLACK)
+        self.cleared = True
 
     def redraw(self):
         self.clear()
@@ -234,9 +261,11 @@ class AltitudeProfilePage(Display):
 
     def update_zoom(self):
         self.update_scale_boxes()
-        self.update_display()  # clears
+        self.manager.trigger_update_display = True
 
     def button_a_was_pressed(self):
+        if self.x_range == 1:
+            return
         self.x_range -= 1
         self.y_range -= 1000
         self.update_zoom()
@@ -506,7 +535,6 @@ class ListDisplay(Display):
                 box.show()
 
     def display_report(self, report: "LatestReport", index: int):
-        print("Setting report: {}".format(report))
         self.rows[index][0].setText("{}".format(report.identifier))
         if report.is_good_distance():
             self.rows[index][1].setText("{:>.0f}nm".format(report.get_distance()))
@@ -537,17 +565,8 @@ class ListDisplay(Display):
             self.clear_row(index)
         self.reports = new_report_list
 
-    def next_page(self):
+    def button_a_was_pressed(self):
         self.current_page += 1
         if self.current_page >= self.number_of_pages:
             self.current_page = 0
-        self.update_display()
-
-    def previous_page(self):
-        self.current_page -= 1
-        if self.current_page < 0:
-            self.current_page = self.number_of_pages - 1
-        self.update_display()
-
-    def button_a_was_pressed(self):
-        self.next_page()
+        self.manager.trigger_update_display = True

@@ -18,7 +18,8 @@ situation_dictionary = {}
 
 SCREEN_UPDATE_TIME = const(4)
 WEBSOCKET_ERROR_TIMEOUT = const(30)
-SOCKET_TIMEOUT = const(0.1)
+SOCKET_TIMEOUT = 0.1
+
 
 def _get(url: str):
     r = urequests.get(url)
@@ -66,7 +67,6 @@ btnA.wasPressed(display_manager.button_a_was_pressed)
 btnB.wasPressed(display_manager.button_b_was_pressed)
 btnC.wasPressed(display_manager.button_c_was_pressed)
 
-
 gps_fix = False
 while not wifiCfg.wlan_sta.isconnected():
     wifiCfg.doConnect(STRATUX_SSID, '')
@@ -78,6 +78,7 @@ start_time = time.time()
 last_time = 0
 last_report = 0
 while True:
+    # Main loop. Everything should happen here.
     try:
         resp = websocket.recv()
         last_report = time.time()
@@ -112,3 +113,7 @@ while True:
         reports_list.flush_old_reports()
         display_manager.update_display()
         print("Free memory: {} B".format(gc.mem_free()))
+    if display_manager.trigger_select_display > -1:
+        display_manager.actually_change_display()
+    if display_manager.trigger_update_display:
+        display_manager.update_display()
