@@ -1,4 +1,6 @@
-HEADER_OFFSET = const(20)
+import random
+
+HEADER_OFFSET = const(15)
 FOOTER_OFFSET = const(20)
 SCREEN_WIDTH = const(320)
 SCREEN_HEIGHT = const(240)
@@ -83,3 +85,22 @@ def extend_line(x0, y0, x1, y1):
     x1 = SCREEN_WIDTH - 1
     y1 = y0 + (x1 - x0) * incline
     return x1, y1
+
+
+def random_position_along_line(x0, y0, x1, y1,text_width):
+    if x1 - x0 == 0:
+        incline = 0
+    else:
+        incline = (y1 - y0) / (x1 - x0)
+    x = int(min(random.randint(x0, x1), LOCAL_RIGHT-text_width))
+    y = int(y0 + (x - x0) * incline)
+    return x, y
+
+def centre_position_along_line(x0, y0, x1, y1, text_width):
+    if x1 - x0 == 0:
+        incline = 0
+    else:
+        incline = (y1 - y0) / (x1 - x0)
+    x = int(min(x0 + (x1-x0)/2, LOCAL_RIGHT-text_width))
+    y = int(y0 + (x - x0) * incline)
+    return x, y

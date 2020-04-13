@@ -6,7 +6,8 @@ from m5ui import *
 
 import math
 
-from clip_line import SCREEN_HEIGHT, SCREEN_WIDTH, clip_line, HEADER_OFFSET, FOOTER_OFFSET, extend_line
+from clip_line import SCREEN_HEIGHT, SCREEN_WIDTH, clip_line, HEADER_OFFSET, FOOTER_OFFSET, extend_line, \
+    centre_position_along_line
 
 
 class DisplayManager:
@@ -161,8 +162,8 @@ class AltitudeProfilePage(Display):
         self.x_range = 2  # minutes
         self.y_range = 2000  # feet
         self.cleared = False
-        self.x_scale_box = M5TextBox(290, 3 + SCREEN_HEIGHT // 2, "", lcd.FONT_Default, 0xffffff)
-        self.y_scale_box = M5TextBox(5, HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff)
+        self.x_scale_box = M5TextBox(290, 5 + SCREEN_HEIGHT // 2, "", lcd.FONT_Default, 0xffffff)
+        self.y_scale_box = M5TextBox(7, HEADER_OFFSET, "", lcd.FONT_Default, 0xffffff)
         self.zoom_out_box = M5TextBox(223, 225, "Out", lcd.FONT_Default, lcd.GREEN, rotate=0)
         self.zoom_in_box = M5TextBox(50, 225, "In", lcd.FONT_Default, lcd.GREEN, rotate=0)
         self.update_scale_boxes()
@@ -217,21 +218,16 @@ class AltitudeProfilePage(Display):
             distance_fraction = 1 - min(report.get_distance() / 20, 1)  # Fraction of 20 nautical miles
 
             colour_grade = int(distance_fraction * 240) + 16
-            colour = colour_grade * 255 * 255 + colour_grade * 255 + colour_grade
-            lcd.line(x0, y0, x1, y1, color=colour)
+            colour = colour_grade * 256 * 256 + colour_grade * 256 + colour_grade
             text_width = lcd.textWidth(str(report.identifier))
-            if x1 >= SCREEN_WIDTH-1:
-                lcd.font(lcd.FONT_DefaultSmall)
-                lcd.print("{}".format(report.identifier), int(x1 - text_width), y1)
-            else:
-                lcd.font(lcd.FONT_DefaultSmall, rotate=90)
-
-                lcd.print("{}".format(report.identifier), x1,
-                          y1 if y1 < SCREEN_HEIGHT - FOOTER_OFFSET - text_width else y1 - text_width)
+            text_x, text_y = centre_position_along_line(x0, y0, x1, y1, text_width)
+            lcd.line(x0, y0, x1, y1, color=colour)
+            lcd.font(lcd.FONT_DefaultSmall)
+            lcd.print("{}".format(report.identifier), text_x, text_y, colour)
 
     def update_scale_boxes(self):
         self.x_scale_box.setText("{}m".format(self.x_range))
-        self.y_scale_box.setText("{}ft".format(self.y_range))
+        self.y_scale_box.setText("{:,} ft".format(self.y_range))
 
     def clear(self):
         lcd.rect(0, HEADER_OFFSET, SCREEN_WIDTH, SCREEN_HEIGHT - FOOTER_OFFSET, lcd.BLACK, lcd.BLACK)
@@ -242,6 +238,10 @@ class AltitudeProfilePage(Display):
         self.x_scale_box.show()
         self.y_scale_box.show()
         lcd.line(0, SCREEN_HEIGHT // 2, SCREEN_WIDTH, SCREEN_HEIGHT // 2, lcd.WHITE)
+        lcd.line(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 3, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 3, lcd.WHITE)
+
+        lcd.line(0, SCREEN_HEIGHT // 4, 4, SCREEN_HEIGHT // 4, lcd.WHITE)
+        lcd.line(0, 3 * SCREEN_HEIGHT // 4, 4, 3 * SCREEN_HEIGHT // 4, lcd.WHITE)
         lcd.line(0, HEADER_OFFSET, 0, SCREEN_HEIGHT - FOOTER_OFFSET, lcd.WHITE)
 
     def show(self):
