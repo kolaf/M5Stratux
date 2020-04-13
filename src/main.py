@@ -4,6 +4,7 @@ from m5ui import *
 import wifiCfg
 import uwebsockets.client
 import gc
+import utime as time
 
 from display_manager import *
 from report import *
@@ -15,6 +16,9 @@ key_map = {}
 status_dictionary = {}
 situation_dictionary = {}
 
+SCREEN_UPDATE_TIME = const(4)
+WEBSOCKET_ERROR_TIMEOUT = const(30)
+SOCKET_TIMEOUT = const(0.1)
 
 def _get(url: str):
     r = urequests.get(url)
@@ -51,59 +55,16 @@ def get_status(display_manager):
 
 def create_websocket():
     websocket = uwebsockets.client.connect("ws://{}/traffic".format(STRATUX_ADDRESS))
-    websocket.settimeout(0.1)
+    websocket.settimeout(SOCKET_TIMEOUT)
     return websocket
 
 
 reports_list = ReportList(status_dictionary, situation_dictionary)
 display_manager = DisplayManager(reports_list, status_dictionary, situation_dictionary)
 
-# button_c_pressed = False
-# button_c_double_press = False
-# def button_c_press_handler():
-#     global button_c_pressed
-#     button_c_pressed = True
-#
-# def button_c_double_press_handler():
-#     global button_c_double_press
-#     button_c_double_press = True
-#
-# def button_c_released_handler():
-#     global button_c_pressed, button_c_double_press
-#     if button_c_double_press:
-#         reports_list.toggle_include_valid_positions()
-#     else:
-#         display_manager.button_c_was_pressed()
-#     button_c_double_press = False
-#     button_c_pressed = False
-
-
 btnA.wasPressed(display_manager.button_a_was_pressed)
 btnB.wasPressed(display_manager.button_b_was_pressed)
 btnC.wasPressed(display_manager.button_c_was_pressed)
-# btnC.wasReleased(button_c_released_handler)
-# btnC.wasDoublePress(button_c_double_press_handler)
-
-# alerting = False
-# alert_start = 0
-#
-#
-# @timerSch.event('alarm_event')
-# def alarm():
-#     global display_manager, alerting, alert_start
-#     if alert_start == 0:
-#         alert_start = time.time()
-#     if time.time() - alert_start > 10:
-#         display_manager.cancel_alarm()
-#         alert_start = 0
-#         alerting = False
-#         return
-#     if alerting:
-#         display_manager.alerting = True
-#         alerting = False
-#     else:
-#         display_manager.alerting = False
-#         alerting = True
 
 
 gps_fix = False
@@ -122,11 +83,14 @@ while True:
         last_report = time.time()
         message = read_response(resp)
         # print(message)
-        report = reports_list.store_report(message)
-        # print(report)
+        try:
+            report = reports_list.store_report(message)
+            print(report)
+        except Exception as e:
+            print(e)
     except Exception as e:
         pass
-    if time.time() - last_report > 30:
+    if time.time() - last_report > WEBSOCKET_ERROR_TIMEOUT:
         try:
             websocket.close()
         except:
@@ -135,7 +99,7 @@ while True:
         last_report = time.time()
 
     now = time.time()
-    if now - last_time > 2:
+    if now - last_time > SCREEN_UPDATE_TIME:
         last_time = now
         try:
             get_status(display_manager)

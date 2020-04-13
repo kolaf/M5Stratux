@@ -1,7 +1,6 @@
-import datetime
 import json
 import math
-import time
+import utime as time
 from collections import namedtuple
 
 message_keys = ['Addr_type', 'Age', 'AgeLastAlt', 'Alt', 'AltIsGNSS', 'Bearing', 'BearingDist_valid', 'Distance',
@@ -56,12 +55,12 @@ class LatestReport:
         self.age = incoming_message.Age
         self.last_updated = time.time()
         # If the altitude is unknown, assume worst-case
-        incoming_altitude_timestamp = datetime.datetime.strptime(incoming_message.Last_alt, "%Y-%m-%dT%H:%M:%S.%fZ")
+        incoming_altitude_timestamp = time.time()-incoming_message.AgeLastAlt
         if self.altitude == 0 and not self.message.OnGround:
             self.altitude = self.report_list.situation_dictionary["OwnAltitude"]
         else:
             self.altitudes.append((incoming_message.Alt, incoming_altitude_timestamp))
-            if len(self.altitude) > 10:
+            if len(self.altitudes) > 10:
                 self.altitudes.pop(0)
         if incoming_message.Vvel == 0 and len(self.altitudes) > 0 and incoming_altitude_timestamp != self.altitudes[0][
             1]:
@@ -135,7 +134,7 @@ class ReportList:
         if not self.get_include_valid_positions():
             return [item for item in self.reports.values() if not item.message.Position_valid]
         else:
-            return self.reports.values()
+            return list(self.reports.values())
 
     def get_list_sorted_score(self):
         return sorted(self.get_selected_reports(), key=lambda k: k.get_distance_score())
